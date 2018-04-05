@@ -22,17 +22,28 @@ parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('--loss', type=str, default='hinge')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
+parser.add_argument('--image_dir', type=str, default='input/')
 
 parser.add_argument('--model', type=str, default='resnet')
 
 args = parser.parse_args()
 
+"""
 loader = torch.utils.data.DataLoader(
     datasets.CIFAR10('../data/', train=True, download=True,
         transform=transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])),
         batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
+"""
+dataset = datasets.ImageFolder(root=args.image_dir,
+   transform=transforms.Compose([
+       transforms.Resize((32,32)),
+       transforms.ToTensor(),
+       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+   ]))
+loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
+
 
 Z_dim = 128
 #number of updates to discriminator for every update to generator 
@@ -56,8 +67,9 @@ optim_gen  = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.0,0.9))
 scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 
-def train(epoch):
+def train(epoch, max_batches=1000):
     for batch_idx, (data, target) in enumerate(loader):
+        print('Training batch {}'.format(batch_idx))
         if data.size()[0] != args.batch_size:
             continue
         data, target = Variable(data.cuda()), Variable(target.cuda())
@@ -91,6 +103,9 @@ def train(epoch):
 
         if batch_idx % 100 == 0:
             print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
+        if batch_idx == max_batches:
+            print('Training completed {} batches, ending epoch'.format(max_batches))
+            break
     scheduler_d.step()
     scheduler_g.step()
 
@@ -120,7 +135,7 @@ def evaluate(epoch):
 
 os.makedirs(args.checkpoint_dir, exist_ok=True)
 
-for epoch in range(2000):
+for epoch in range(100):
     train(epoch)
     evaluate(epoch)
     torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
