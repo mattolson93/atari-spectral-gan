@@ -109,12 +109,10 @@ def train(epoch, max_batches=1000):
     scheduler_d.step()
     scheduler_g.step()
 
+
 fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
 def evaluate(epoch):
-
     samples = generator(fixed_z).cpu().data.numpy()[:64]
-
-
     fig = plt.figure(figsize=(8, 8))
     gs = gridspec.GridSpec(8, 8)
     gs.update(wspace=0.05, hspace=0.05)
@@ -133,11 +131,15 @@ def evaluate(epoch):
     plt.savefig('out/{}.png'.format(str(epoch).zfill(3)), bbox_inches='tight')
     plt.close(fig)
 
-os.makedirs(args.checkpoint_dir, exist_ok=True)
 
-for epoch in range(100):
-    train(epoch)
-    evaluate(epoch)
-    torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
-    torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
+def main():
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    for epoch in range(100):
+        train(epoch)
+        evaluate(epoch)
+        torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
+        torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
 
+
+if __name__ == '__main__':
+    main()
