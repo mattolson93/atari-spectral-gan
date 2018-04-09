@@ -7,6 +7,7 @@ from spectral_normalization import SpectralNorm
 channels = 3
 leak = 0.1
 
+# Edit: change to 40x40
 class Generator(nn.Module):
     def __init__(self, z_dim):
         super(Generator, self).__init__()
@@ -16,13 +17,13 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(z_dim, 512, 4, stride=1),
             nn.BatchNorm2d(512),
             nn.ReLU(),
-            nn.ConvTranspose2d(512, 256, 4, stride=2, padding=(1,1)),
+            nn.ConvTranspose2d(512, 256, 4, stride=2, padding=(0,0)), # 10
             nn.BatchNorm2d(256),
             nn.ReLU(),
-            nn.ConvTranspose2d(256, 128, 4, stride=2, padding=(1,1)),
+            nn.ConvTranspose2d(256, 128, 4, stride=2, padding=(1,1)), # 20
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=(1,1)),
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=(1,1)),  # 40
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.ConvTranspose2d(64, channels, 3, stride=1, padding=(1,1)),
@@ -31,6 +32,8 @@ class Generator(nn.Module):
     def forward(self, z):
         return self.model(z.view(-1, self.z_dim, 1, 1))
 
+# What is w_g supposed to be?
+w_g = 4
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()

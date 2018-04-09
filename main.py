@@ -38,7 +38,7 @@ loader = torch.utils.data.DataLoader(
 """
 dataset = datasets.ImageFolder(root=args.image_dir,
    transform=transforms.Compose([
-       transforms.Resize((32,32)),
+       transforms.Resize((40,40)),
        transforms.ToTensor(),
        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
    ]))
