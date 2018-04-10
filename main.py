@@ -40,7 +40,7 @@ loader = torch.utils.data.DataLoader(
 print('building datasets.ImageFolder')
 dataset = datasets.ImageFolder(root=args.image_dir,
    transform=transforms.Compose([
-       transforms.Resize((40,40)),
+       transforms.Resize((80,80)),
        transforms.ToTensor(),
        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
    ]))

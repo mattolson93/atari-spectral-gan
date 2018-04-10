@@ -23,7 +23,10 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(256, 128, 4, stride=2, padding=(1,1)), # 20
             nn.BatchNorm2d(128),
             nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=(1,1)),  # 40
+            nn.ConvTranspose2d(128, 128, 4, stride=2, padding=(1,1)), # 40
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=(1,1)),  # 80
             nn.BatchNorm2d(64),
             nn.ReLU(),
             nn.ConvTranspose2d(64, channels, 3, stride=1, padding=(1,1)),
@@ -45,7 +48,8 @@ class Discriminator(nn.Module):
         self.conv4 = SpectralNorm(nn.Conv2d(128, 128, 4, stride=2, padding=(1,1)))
         self.conv5 = SpectralNorm(nn.Conv2d(128, 256, 3, stride=1, padding=(1,1)))
         self.conv6 = SpectralNorm(nn.Conv2d(256, 256, 4, stride=2, padding=(1,1)))
-        self.conv7 = SpectralNorm(nn.Conv2d(256, 512, 3, stride=1, padding=(1,1)))
+        self.conv7 = SpectralNorm(nn.Conv2d(256, 256, 4, stride=2, padding=(1,1)))
+        self.conv8 = SpectralNorm(nn.Conv2d(256, 512, 3, stride=1, padding=(1,1)))
 
 
         self.fc = SpectralNorm(nn.Linear(w_g * w_g * 512, 1))
@@ -59,6 +63,7 @@ class Discriminator(nn.Module):
         m = nn.LeakyReLU(leak)(self.conv5(m))
         m = nn.LeakyReLU(leak)(self.conv6(m))
         m = nn.LeakyReLU(leak)(self.conv7(m))
+        m = nn.LeakyReLU(leak)(self.conv8(m))
 
         return self.fc(m.view(-1,w_g * w_g * 512))
 
