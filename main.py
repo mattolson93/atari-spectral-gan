@@ -17,6 +17,7 @@ import matplotlib.gridspec as gridspec
 import os
 
 
+print('running argparse stuff')
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--lr', type=float, default=2e-4)
@@ -36,15 +37,19 @@ loader = torch.utils.data.DataLoader(
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])),
         batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 """
+print('building datasets.ImageFolder')
 dataset = datasets.ImageFolder(root=args.image_dir,
    transform=transforms.Compose([
        transforms.Resize((40,40)),
        transforms.ToTensor(),
        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
    ]))
+print('building DataLoader...')
 loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
+print('finished building DataLoader')
 
 
+print('building model...')
 Z_dim = 128
 #number of updates to discriminator for every update to generator 
 disc_iters = 5
@@ -66,6 +71,7 @@ optim_gen  = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.0,0.9))
 # use an exponentially decaying learning rate
 scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
+print('finished building model')
 
 def train(epoch, max_batches=1000):
     for batch_idx, (data, target) in enumerate(loader):
@@ -133,8 +139,10 @@ def evaluate(epoch):
 
 
 def main():
+    print('creating checkpoint directory')
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     for epoch in range(100):
+        print('starting epoch {}'.format(epoch))
         train(epoch)
         evaluate(epoch)
         torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
