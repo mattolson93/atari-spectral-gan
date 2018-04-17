@@ -27,23 +27,13 @@ parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
 parser.add_argument('--image_dir', type=str, default='input/')
 parser.add_argument('--video_name', type=str, default='sample')
 parser.add_argument('--model', type=str, default='resnet')
+parser.add_argument('--latent_dim', type=int, default=4)
 
 args = parser.parse_args()
 
-print('building datasets.ImageFolder')
-dataset = datasets.ImageFolder(root=args.image_dir,
-   transform=transforms.Compose([
-       transforms.Resize((80,80)),
-       transforms.ToTensor(),
-       transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-   ]))
-print('building DataLoader...')
-loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
-print('finished building DataLoader')
-
 
 print('building model...')
-Z_dim = 4
+Z_dim = args.latent_dim
 
 # discriminator = torch.nn.DataParallel(Discriminator()).cuda() # TODO: try out multi-gpu training
 if args.model == 'resnet':
