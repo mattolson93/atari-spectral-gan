@@ -76,7 +76,8 @@ def show(
         resize_to=None,
         normalize_color=True,
         caption=None,
-        font_size=16):
+        font_size=16,
+        return_pixels=False):
     # Munge data to allow input filenames, pixels, PIL images, etc
     if type(data) == type(np.array([])):
         pixels = data
@@ -96,9 +97,12 @@ def show(
             pixels = pixels.transpose((0,2,3,1))
         elif len(pixels.shape) == 3 and pixels.shape[0] in (1, 3):
             pixels = pixels.transpose((1,2,0))
+    elif hasattr(data, 'savefig'):
+        data.savefig('/tmp/plot.png')
+        pixels = np.array(Image.open('/tmp/plot.png'))
     elif type(data).__name__ == 'AxesSubplot':
-        data.get_figure().savefig('/tmp/plot.jpg')
-        pixels = np.array(Image.open('/tmp/plot.jpg'))
+        data.get_figure().savefig('/tmp/plot.png')
+        pixels = np.array(Image.open('/tmp/plot.png'))
     elif hasattr(data, 'startswith'):
         pixels = decode_jpg(data, resize_to=resize_to)
     else:
@@ -167,6 +171,9 @@ def show(
     if video_filename:
         ensure_directory_exists(video_filename)
         open(video_filename, 'ab').write(encode_jpg(pixels))
+
+    if return_pixels:
+        return pixels
 
 
 def ensure_directory_exists(filename):

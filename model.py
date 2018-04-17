@@ -36,21 +36,28 @@ class Generator(nn.Module):
         return self.model(z.view(-1, self.z_dim, 1, 1))
 
 # What is w_g supposed to be?
-w_g = 4
+w_g = 3
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
 
+        # 80 x 80
         self.conv1 = SpectralNorm(nn.Conv2d(channels, 64, 3, stride=1, padding=(1,1)))
-
+        # 80 x 80
         self.conv2 = SpectralNorm(nn.Conv2d(64, 64, 4, stride=2, padding=(1,1)))
+        # 40 x 40
         self.conv3 = SpectralNorm(nn.Conv2d(64, 128, 3, stride=1, padding=(1,1)))
+        # 40 x 40
         self.conv4 = SpectralNorm(nn.Conv2d(128, 128, 4, stride=2, padding=(1,1)))
+        # 20 x 20
         self.conv5 = SpectralNorm(nn.Conv2d(128, 256, 3, stride=1, padding=(1,1)))
+        # 20 x 20
         self.conv6 = SpectralNorm(nn.Conv2d(256, 256, 4, stride=2, padding=(1,1)))
+        # 10 x 10
         self.conv7 = SpectralNorm(nn.Conv2d(256, 256, 4, stride=2, padding=(1,1)))
-        self.conv8 = SpectralNorm(nn.Conv2d(256, 512, 3, stride=1, padding=(1,1)))
-
+        # 5 x 5
+        self.conv8 = SpectralNorm(nn.Conv2d(256, 512, 3, stride=1, padding=(0,0)))
+        # 3 x 3
 
         self.fc = SpectralNorm(nn.Linear(w_g * w_g * 512, 1))
 

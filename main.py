@@ -25,6 +25,7 @@ parser.add_argument('--loss', type=str, default='hinge')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
 parser.add_argument('--image_dir', type=str, default='input/')
 
+parser.add_argument('--latent_size', type=int, default='input/')
 parser.add_argument('--model', type=str, default='resnet')
 
 args = parser.parse_args()
@@ -50,8 +51,8 @@ print('finished building DataLoader')
 
 
 print('building model...')
-Z_dim = 128
-#number of updates to discriminator for every update to generator 
+Z_dim = args.latent_size
+#number of updates to discriminator for every update to generator
 disc_iters = 5
 
 # discriminator = torch.nn.DataParallel(Discriminator()).cuda() # TODO: try out multi-gpu training
