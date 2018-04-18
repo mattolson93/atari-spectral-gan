@@ -1,6 +1,9 @@
 # DCGAN-like generator and discriminator
+import numpy as np
+import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 from spectral_normalization import SpectralNorm
 
@@ -28,12 +31,24 @@ class Generator(nn.Module):
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, 4, stride=2, padding=(1,1)),  # 80
             nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, channels, 3, stride=1, padding=(1,1)),
-            nn.Tanh())
+            nn.ReLU())
+        # Generate a grid to help learn absolute position
+        grid = np.zeros((1, 80, 80))
+        grid[::5] = 1
+        self.placement_grid = Variable(torch.Tensor(grid).cuda())
+        self.conv_to_rgb = nn.ConvTranspose2d(64 + 1, channels, 3, stride=1, padding=(1,1))
 
     def forward(self, z):
-        return self.model(z.view(-1, self.z_dim, 1, 1))
+        batch_size = z.shape[0]
+        z_in = z.view(-1, self.z_dim, 1, 1)
+        # Run the model except for the last layer
+        x1 = self.model(z_in)
+        # Create a fixed pattern for orientation
+        x2 = self.placement_grid.expand(batch_size, 1, 80, 80)
+        # Combine them along the channels axis
+        x = torch.cat((x1, x2), dim=1)
+        x = nn.Tanh()(self.conv_to_rgb(x))
+        return x
 
 # What is w_g supposed to be?
 w_g = 3

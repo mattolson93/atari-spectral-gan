@@ -129,7 +129,8 @@ def make_video(output_video_name):
     for i in tqdm(range(400)):
         theta = abs(i - 200) / 200.
         z = theta * fixed_z + (1 - theta) * fixed_zprime
-        samples = generator(z[0]).cpu().data.numpy()
+        #z = z[:args.batch_size]
+        samples = generator(z).cpu().data.numpy()
         pixels = samples.transpose((0,2,3,1)) * 0.5 + 0.5
         v.write_frame(pixels)
     v.finish()
