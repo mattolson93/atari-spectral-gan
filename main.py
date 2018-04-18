@@ -1,10 +1,12 @@
 import argparse
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import ExponentialLR
 from torchvision import datasets, transforms
+from torch import autograd
 from torch.autograd import Variable
 import model_resnet
 import model
@@ -119,6 +121,33 @@ def evaluate(epoch):
 
     plt.savefig('out/{}.png'.format(str(epoch).zfill(3)), bbox_inches='tight')
     plt.close(fig)
+    scores = []
+    for i in range(10):
+        scores.append(evaluate_fit(epoch, i))
+    avg_mse = np.array(scores).mean()
+    print("Epoch {} Avg Encoding MSE:{}".format(epoch, avg_mse))
+
+
+def evaluate_fit(epoch, i=0):
+    # Get a random Atari frame, try to fit it by gradient descent
+    frames, _ = next(loader)
+    frame = frames[0]
+    frame = Variable(frame.cuda())
+
+    z = Variable(torch.randn(1, Z_dim).cuda(), requires_grad=True)
+
+    speed = .01
+    for _ in range(100):
+        encoded = generator(z)[0]
+        mse = (frame - encoded) ** 2
+        loss = mse.sum()
+        df_dz = autograd.grad(loss, z, loss)[0]
+        z = z - speed * df_dz
+        speed *= .99  # annealing schedule
+    filename = 'fit_{:03d}_{:04d}.png'.format(epoch, i)
+    comparison = torch.cat((frame.expand(1,-1,-1,-1), encoded.expand((1, -1, -1, -1))))
+    imutil.show(comparison, filename=filename)
+    return loss.data[0]
 
 
 fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
