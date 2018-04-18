@@ -17,16 +17,15 @@ import matplotlib.gridspec as gridspec
 import os
 
 
-print('running argparse stuff')
+print('Parsing arguments')
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('--loss', type=str, default='hinge')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
-parser.add_argument('--image_dir', type=str, default='input/')
 
-parser.add_argument('--latent_size', type=int, default='input/')
-parser.add_argument('--model', type=str, default='resnet')
+parser.add_argument('--latent_size', type=int, default=10)
+parser.add_argument('--model', type=str, default='dcgan')
 
 args = parser.parse_args()
 
@@ -38,6 +37,7 @@ loader = torch.utils.data.DataLoader(
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])),
         batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 """
+"""
 print('building datasets.ImageFolder')
 dataset = datasets.ImageFolder(root=args.image_dir,
    transform=transforms.Compose([
@@ -48,14 +48,19 @@ dataset = datasets.ImageFolder(root=args.image_dir,
 print('building DataLoader...')
 loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 print('finished building DataLoader')
+"""
+
+from generate_pong_dataset import AtariDataloader
+print('Initializing OpenAI environment...')
+loader = AtariDataloader('Pong-v0', batch_size=64)
+print('Environment initialized')
 
 
-print('building model...')
+print('Building model...')
 Z_dim = args.latent_size
 #number of updates to discriminator for every update to generator
 disc_iters = 5
 
-# discriminator = torch.nn.DataParallel(Discriminator()).cuda() # TODO: try out multi-gpu training
 if args.model == 'resnet':
     discriminator = model_resnet.Discriminator().cuda()
     generator = model_resnet.Generator(Z_dim).cuda()
@@ -74,12 +79,11 @@ scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 print('finished building model')
 
-def train(epoch, max_batches=1000):
+def train(epoch, max_batches=100):
     for batch_idx, (data, target) in enumerate(loader):
-        print('Training batch {}'.format(batch_idx))
         if data.size()[0] != args.batch_size:
             continue
-        data, target = Variable(data.cuda()), Variable(target.cuda())
+        data = Variable(data.cuda())
 
         # update discriminator
         for _ in range(disc_iters):
@@ -108,7 +112,7 @@ def train(epoch, max_batches=1000):
         gen_loss.backward()
         optim_gen.step()
 
-        if batch_idx % 100 == 0:
+        if batch_idx % 10 == 0:
             print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
         if batch_idx == max_batches:
             print('Training completed {} batches, ending epoch'.format(max_batches))
