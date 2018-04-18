@@ -33,7 +33,7 @@ parser.add_argument('--env_name', type=str, default='Pong-v0')
 args = parser.parse_args()
 
 
-from generate_pong_dataset import AtariDataloader
+from atari_data import AtariDataloader
 print('Initializing OpenAI environment...')
 loader = AtariDataloader(args.env_name, batch_size=args.batch_size)
 print('Environment initialized')
@@ -123,15 +123,15 @@ def evaluate(epoch):
 
 fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
 fixed_zprime = Variable(torch.randn(args.batch_size, Z_dim).cuda())
+import tqdm
 def make_video(output_video_name):
     v = imutil.VideoMaker(output_video_name)
-    for i in range(400):
+    for i in tqdm(range(400)):
         theta = abs(i - 200) / 200.
         z = theta * fixed_z + (1 - theta) * fixed_zprime
-        print(z.cpu().data)
         samples = generator(z[0]).cpu().data.numpy()
-        samples = samples.transpose((0,2,3,1))
-        v.write_frame(samples)
+        pixels = samples.transpose((0,2,3,1)) * 0.5 + 0.5
+        v.write_frame(pixels)
     v.finish()
 
 

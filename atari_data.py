@@ -29,10 +29,11 @@ class AtariDataloader():
             obs, r, done, info = env.step(env.action_space.sample())
             if done:
                 env.reset()
-            pixels = obs[34:194].mean(2)
-            pixels = imresize(pixels, (80,80))
-            pixels = pixels.astype(np.float32).reshape(1, 80, 80) / 255.
-            pixels = np.concatenate((pixels, pixels, pixels))
+            pixels = obs[34:194]
+            pixels = imresize(pixels, (80,80)).astype(np.float32)
+            pixels = (pixels - 128) / 128
+            # Output batch x channels x height x width
+            pixels = pixels.transpose((2,0,1))
             observations.append(pixels)
         target = None
         return torch.Tensor(np.array(observations)), None
