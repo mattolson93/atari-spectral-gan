@@ -125,7 +125,14 @@ def evaluate(epoch):
     for i in range(10):
         scores.append(evaluate_fit(epoch, i))
     avg_mse = np.array(scores).mean()
-    print("Epoch {} Avg Encoding MSE:{}".format(epoch, avg_mse))
+    print("Epoch {} Avg Encoding MSE:{:.4f}".format(epoch, avg_mse))
+
+    smoothness_scores = []
+    for i in range(3):
+        distance = evaluate_smoothness(epoch, i)
+        smoothness_scores.append(distance)
+    avg_smoothness = np.array(smoothness_scores).mean()
+    print('Epoch {} smoothness measure: {:.6f}'.format(epoch, avg_smoothness))
 
 
 def evaluate_fit(epoch, idx=0):
@@ -144,18 +151,45 @@ def evaluate_fit(epoch, idx=0):
         df_dz = autograd.grad(loss, z, loss)[0]
         z = z - speed * df_dz
         speed *= .99  # annealing schedule
-    filename = 'fit_{:03d}_{:04d}.png'.format(epoch, idx)
-    comparison = torch.cat((frame.expand(1,-1,-1,-1), encoded.expand((1, -1, -1, -1))))
-    imutil.show(comparison, filename=filename)
+
+    if idx == 0:
+        filename = 'fit_{:03d}_{:04d}.png'.format(epoch, idx)
+        comparison = torch.cat((frame.expand(1,-1,-1,-1), encoded.expand((1, -1, -1, -1))))
+        imutil.show(comparison, filename=filename)
     return loss.data[0]
+
+
+def evaluate_smoothness(epoch, idx=0):
+    # Get two consecutive, similar Atari frames
+    # How far apart are their representations?
+    first_frame = next(loader)[0][idx]
+    second_frame = next(loader)[0][idx]
+
+    f0 = Variable(first_frame.cuda())
+    f1 = Variable(second_frame.cuda())
+    distance = (encode(f0) - encode(f1)) ** 2
+    return distance.mean().data[0]
+
+
+def encode(frame):
+    speed = .01
+    z = Variable(torch.randn(1, Z_dim).cuda(), requires_grad=True)
+    for _ in range(100):
+        encoded = generator(z)[0]
+        mse = (frame - encoded) ** 2
+        loss = mse.sum()
+        df_dz = autograd.grad(loss, z, loss)[0]
+        z = z - speed * df_dz
+        speed *= .99  # annealing schedule
+    return encoded
+
 
 
 fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
 fixed_zprime = Variable(torch.randn(args.batch_size, Z_dim).cuda())
-from tqdm import tqdm
 def make_video(output_video_name):
     v = imutil.VideoMaker(output_video_name)
-    for i in tqdm(range(400)):
+    for i in range(400):
         theta = abs(i - 200) / 200.
         z = theta * fixed_z + (1 - theta) * fixed_zprime
         #z = z[:args.batch_size]
