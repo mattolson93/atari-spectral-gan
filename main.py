@@ -24,6 +24,7 @@ parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('--loss', type=str, default='hinge')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
+parser.add_argument('--epochs', type=int, default=10)
 
 parser.add_argument('--latent_size', type=int, default=10)
 parser.add_argument('--model', type=str, default='dcgan')
@@ -137,7 +138,7 @@ def make_video(output_video_name):
 def main():
     print('creating checkpoint directory')
     os.makedirs(args.checkpoint_dir, exist_ok=True)
-    for epoch in range(10):
+    for epoch in range(args.epochs):
         print('starting epoch {}'.format(epoch))
         train(epoch)
         evaluate(epoch)
