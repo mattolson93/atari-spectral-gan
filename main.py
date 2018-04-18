@@ -128,10 +128,10 @@ def evaluate(epoch):
     print("Epoch {} Avg Encoding MSE:{}".format(epoch, avg_mse))
 
 
-def evaluate_fit(epoch, i=0):
+def evaluate_fit(epoch, idx=0):
     # Get a random Atari frame, try to fit it by gradient descent
     frames, _ = next(loader)
-    frame = frames[0]
+    frame = frames[idx]
     frame = Variable(frame.cuda())
 
     z = Variable(torch.randn(1, Z_dim).cuda(), requires_grad=True)
@@ -144,7 +144,7 @@ def evaluate_fit(epoch, i=0):
         df_dz = autograd.grad(loss, z, loss)[0]
         z = z - speed * df_dz
         speed *= .99  # annealing schedule
-    filename = 'fit_{:03d}_{:04d}.png'.format(epoch, i)
+    filename = 'fit_{:03d}_{:04d}.png'.format(epoch, idx)
     comparison = torch.cat((frame.expand(1,-1,-1,-1), encoded.expand((1, -1, -1, -1))))
     imutil.show(comparison, filename=filename)
     return loss.data[0]
