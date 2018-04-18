@@ -27,15 +27,11 @@ class AtariDataloader():
         observations = []
         for env in self.environments:
             obs, r, done, info = env.step(env.action_space.sample())
-            # Reset after every point scored
-            if r != 0:
+            if done:
                 env.reset()
-                for _ in range(random.randint(1, 100)):
-                    env.step(env.action_space.sample())
-            # Greyscale
             pixels = obs[34:194].mean(2)
             pixels = imresize(pixels, (80,80))
-            pixels = pixels.astype(np.float32).reshape(1, 80, 80)
+            pixels = pixels.astype(np.float32).reshape(1, 80, 80) / 255.
             pixels = np.concatenate((pixels, pixels, pixels))
             observations.append(pixels)
         target = None
