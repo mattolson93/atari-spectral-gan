@@ -123,7 +123,7 @@ def evaluate(epoch):
 
 fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
 fixed_zprime = Variable(torch.randn(args.batch_size, Z_dim).cuda())
-import tqdm
+from tqdm import tqdm
 def make_video(output_video_name):
     v = imutil.VideoMaker(output_video_name)
     for i in tqdm(range(400)):

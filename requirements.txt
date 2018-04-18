@@ -1,3 +1,4 @@
 matplotlib
 gym
 gym[atari]
+tqdm
