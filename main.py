@@ -134,6 +134,9 @@ def evaluate(epoch):
     avg_smoothness = np.array(smoothness_scores).mean()
     print('Epoch {} smoothness measure: {:.6f}'.format(epoch, avg_smoothness))
 
+    print('Epoch {} MSE {:.4f} smoothness {:.6f}'.format(
+        epoch, avg_mse, avg_smoothness))
+
 
 def evaluate_fit(epoch, idx=0):
     # Get a random Atari frame, try to fit it by gradient descent
@@ -205,8 +208,8 @@ def main():
     for epoch in range(args.epochs):
         print('starting epoch {}'.format(epoch))
         train(epoch)
-        evaluate(epoch)
         make_video('epoch_{:03d}'.format(epoch))
+        evaluate(epoch)
         torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
         torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
 
