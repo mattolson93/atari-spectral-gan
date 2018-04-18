@@ -34,7 +34,7 @@ class Generator(nn.Module):
             nn.ReLU())
         # Generate a grid to help learn absolute position
         grid = np.zeros((1, 80, 80))
-        grid[::5] = 1
+        grid[:,:,::5] = 1
         self.placement_grid = Variable(torch.Tensor(grid).cuda())
         self.conv_to_rgb = nn.ConvTranspose2d(64 + 1, channels, 3, stride=1, padding=(1,1))
 
