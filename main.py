@@ -15,6 +15,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
+import imutil
 
 
 print('Parsing arguments')
@@ -127,7 +128,6 @@ def evaluate(epoch):
     fig = plt.figure(figsize=(8, 8))
     gs = gridspec.GridSpec(8, 8)
     gs.update(wspace=0.05, hspace=0.05)
-
     for i, sample in enumerate(samples):
         ax = plt.subplot(gs[i])
         plt.axis('off')
@@ -143,13 +143,28 @@ def evaluate(epoch):
     plt.close(fig)
 
 
+fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
+fixed_zprime = Variable(torch.randn(args.batch_size, Z_dim).cuda())
+def make_video(output_video_name):
+    v = imutil.VideoMaker(output_video_name)
+    for i in range(400):
+        theta = abs(i - 200) / 200.
+        z = theta * fixed_z + (1 - theta) * fixed_zprime
+        print(z.cpu().data)
+        samples = generator(z[0]).cpu().data.numpy()
+        samples = samples.transpose((0,2,3,1))
+        v.write_frame(samples)
+    v.finish()
+
+
 def main():
     print('creating checkpoint directory')
     os.makedirs(args.checkpoint_dir, exist_ok=True)
-    for epoch in range(100):
+    for epoch in range(10):
         print('starting epoch {}'.format(epoch))
         train(epoch)
         evaluate(epoch)
+        make_video('epoch_{:03d}'.format(epoch))
         torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
         torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
 
