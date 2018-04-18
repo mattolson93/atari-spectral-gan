@@ -27,13 +27,17 @@ class AtariDataloader():
         observations = []
         for env in self.environments:
             obs, r, done, info = env.step(env.action_space.sample())
-            if done:
+            if r:
+                # After a point is scored, reset
                 env.reset()
+                # Wait until the ball appears
+                for _ in range(20):
+                    env.step(env.action_space.sample())
             pixels = obs[34:194]
             pixels = imresize(pixels, (80,80)).astype(np.float32)
             pixels = (pixels - 128) / 128
             # Output batch x channels x height x width
             pixels = pixels.transpose((2,0,1))
             observations.append(pixels)
-        target = None
+        # Standard API: next() returns two tensors (x, y)
         return torch.Tensor(np.array(observations)), None
