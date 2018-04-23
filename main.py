@@ -48,16 +48,19 @@ disc_iters = 5
 
 discriminator = model.Discriminator().cuda()
 generator = model.Generator(Z_dim).cuda()
+encoder = model.Encoder(Z_dim).cuda()
 
 # because the spectral normalization module creates parameters that don't require gradients (u and v), we don't want to 
 # optimize these using sgd. We only let the optimizer operate on parameters that _do_ require gradients
 # TODO: replace Parameters with buffers, which aren't returned from .parameters() method.
 optim_disc = optim.Adam(filter(lambda p: p.requires_grad, discriminator.parameters()), lr=args.lr, betas=(0.0,0.9))
-optim_gen  = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.0,0.9))
+optim_gen = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.0,0.9))
+optim_enc = optim.Adam(filter(lambda p: p.requires_grad, encoder.parameters()), lr=args.lr, betas=(0.0,0.9))
 
 # use an exponentially decaying learning rate
 scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
+scheduler_e = optim.lr_scheduler.ExponentialLR(optim_enc, gamma=0.99)
 print('finished building model')
 
 def sample_z(batch_size, z_dim):
@@ -71,6 +74,19 @@ def train(epoch, max_batches=100):
             continue
         data = Variable(data.cuda())
 
+        # reconstruct images
+        optim_enc.zero_grad()
+        optim_gen.zero_grad()
+
+        reconstructed = generator(encoder(data))
+
+        aac_loss = torch.sum((reconstructed - data)**2)
+        aac_loss.backward()
+
+        optim_enc.step()
+        optim_gen.step()
+
+        """
         # update discriminator
         for _ in range(disc_iters):
             z = sample_z(args.batch_size, Z_dim)
@@ -97,12 +113,15 @@ def train(epoch, max_batches=100):
             gen_loss = nn.BCEWithLogitsLoss()(discriminator(generator(z)), Variable(torch.ones(args.batch_size, 1).cuda()))
         gen_loss.backward()
         optim_gen.step()
+        """
 
         if batch_idx % 10 == 0:
-            print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
+            #print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
+            print("Autoencoder loss: {:.3f}".format(aac_loss.data[0]))
         if batch_idx == max_batches:
             print('Training completed {} batches, ending epoch'.format(max_batches))
             break
+    scheduler_e.step()
     scheduler_d.step()
     scheduler_g.step()
 
