@@ -60,6 +60,11 @@ scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 print('finished building model')
 
+def sample_z(batch_size, z_dim):
+    # Normal Distribution
+    z = torch.randn(batch_size, z_dim)
+    return Variable(z.cuda())
+
 def train(epoch, max_batches=100):
     for batch_idx, (data, target) in enumerate(loader):
         if data.size()[0] != args.batch_size:
@@ -68,7 +73,7 @@ def train(epoch, max_batches=100):
 
         # update discriminator
         for _ in range(disc_iters):
-            z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
+            z = sample_z(args.batch_size, Z_dim)
             optim_disc.zero_grad()
             optim_gen.zero_grad()
             if args.loss == 'hinge':
@@ -81,7 +86,7 @@ def train(epoch, max_batches=100):
             disc_loss.backward()
             optim_disc.step()
 
-        z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
+        z = sample_z(args.batch_size, Z_dim)
 
         # update generator
         optim_disc.zero_grad()
@@ -102,7 +107,7 @@ def train(epoch, max_batches=100):
     scheduler_g.step()
 
 
-fixed_z = Variable(torch.randn(args.batch_size, Z_dim).cuda())
+fixed_z = sample_z(args.batch_size, Z_dim)
 def evaluate(epoch):
     samples = generator(fixed_z).cpu().data.numpy()[:64]
     fig = plt.figure(figsize=(8, 8))
@@ -144,6 +149,9 @@ def evaluate_fit(epoch, idx=0):
     frame = frames[idx]
     frame = Variable(frame.cuda())
 
+    # TODO: Instead of standard gradient descent, this should be
+    #  projected gradient descent on eg. the unit sphere if the
+    #  behavior of sample_z is changed
     z = Variable(torch.randn(1, Z_dim).cuda(), requires_grad=True)
 
     speed = .01
