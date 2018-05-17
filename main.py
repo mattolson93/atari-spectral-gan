@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
 import imutil
+from scipy.misc import imsave
 
 
 print('Parsing arguments')
@@ -50,6 +51,9 @@ discriminator = model.Discriminator().cuda()
 generator = model.Generator(Z_dim).cuda()
 encoder = model.Encoder(Z_dim).cuda()
 
+#encoder.load_state_dict(torch.load("./checkpoints/enc_49"))
+#generator.load_state_dict(torch.load("./checkpoints/gen_49"))
+
 # because the spectral normalization module creates parameters that don't require gradients (u and v), we don't want to 
 # optimize these using sgd. We only let the optimizer operate on parameters that _do_ require gradients
 # TODO: replace Parameters with buffers, which aren't returned from .parameters() method.
@@ -70,6 +74,7 @@ def sample_z(batch_size, z_dim):
 
 def train(epoch, max_batches=100):
     for batch_idx, (data, target) in enumerate(loader):
+        
         if data.size()[0] != args.batch_size:
             continue
         data = Variable(data.cuda())
@@ -77,43 +82,14 @@ def train(epoch, max_batches=100):
         # reconstruct images
         optim_enc.zero_grad()
         optim_gen.zero_grad()
-
+        
         reconstructed = generator(encoder(data))
 
-        aac_loss = torch.sum((reconstructed - data)**2)
+        aac_loss = torch.sum((reconstructed - data)**2 )#> .1)
         aac_loss.backward()
 
         optim_enc.step()
         optim_gen.step()
-
-        """
-        # update discriminator
-        for _ in range(disc_iters):
-            z = sample_z(args.batch_size, Z_dim)
-            optim_disc.zero_grad()
-            optim_gen.zero_grad()
-            if args.loss == 'hinge':
-                disc_loss = nn.ReLU()(1.0 - discriminator(data)).mean() + nn.ReLU()(1.0 + discriminator(generator(z))).mean()
-            elif args.loss == 'wasserstein':
-                disc_loss = -discriminator(data).mean() + discriminator(generator(z)).mean()
-            else:
-                disc_loss = nn.BCEWithLogitsLoss()(discriminator(data), Variable(torch.ones(args.batch_size, 1).cuda())) + \
-                    nn.BCEWithLogitsLoss()(discriminator(generator(z)), Variable(torch.zeros(args.batch_size, 1).cuda()))
-            disc_loss.backward()
-            optim_disc.step()
-
-        z = sample_z(args.batch_size, Z_dim)
-
-        # update generator
-        optim_disc.zero_grad()
-        optim_gen.zero_grad()
-        if args.loss == 'hinge' or args.loss == 'wasserstein':
-            gen_loss = -discriminator(generator(z)).mean()
-        else:
-            gen_loss = nn.BCEWithLogitsLoss()(discriminator(generator(z)), Variable(torch.ones(args.batch_size, 1).cuda()))
-        gen_loss.backward()
-        optim_gen.step()
-        """
 
         if batch_idx % 10 == 0:
             #print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
@@ -124,6 +100,7 @@ def train(epoch, max_batches=100):
     scheduler_e.step()
     scheduler_d.step()
     scheduler_g.step()
+    
 
 
 fixed_z = sample_z(args.batch_size, Z_dim)
@@ -232,13 +209,23 @@ def make_video(output_video_name):
 def main():
     print('creating checkpoint directory')
     os.makedirs(args.checkpoint_dir, exist_ok=True)
+    
     for epoch in range(args.epochs):
         print('starting epoch {}'.format(epoch))
         train(epoch)
-        make_video('epoch_{:03d}'.format(epoch))
-        evaluate(epoch)
+        test_img = loader.get_img()
+        #print (test_img.shape)
+        imsave("./imgs/real_img"+str(epoch)+".png", np.reshape(test_img, (80,80)) * 255)
+        list = []
+        list.append(test_img)
+        z = encoder(Variable(torch.Tensor(np.array(list)).cuda()))
+        samples = generator(z).cpu().data.numpy()
+        pixels = np.reshape(samples, (80,80)) * 255.0
+        imutil.show(pixels, filename="./imgs/fake_img"+str(epoch)+".png")
+       
         torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
         torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
+        torch.save(encoder.state_dict(), os.path.join(args.checkpoint_dir, 'enc_{}'.format(epoch)))
 
 
 if __name__ == '__main__':

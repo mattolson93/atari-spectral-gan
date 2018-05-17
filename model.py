@@ -7,7 +7,7 @@ from torch.autograd import Variable
 
 from spectral_normalization import SpectralNorm
 
-channels = 3
+channels = 1
 leak = 0.1
 
 
