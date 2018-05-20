@@ -31,7 +31,12 @@ parser.add_argument('--epochs', type=int, default=10)
 
 parser.add_argument('--latent_size', type=int, default=10)
 parser.add_argument('--model', type=str, default='dcgan')
+parser.add_argument('--gpu', type=int, default=7)
 parser.add_argument('--env_name', type=str, default='Pong-v0')
+parser.add_argument('--enc_file', type=str, default=None)
+parser.add_argument('--gen_file', type=str, default=None)
+parser.add_argument('--starting_epoch', type=int, default=0)
+
 
 args = parser.parse_args()
 
@@ -43,13 +48,31 @@ print('Environment initialized')
 
 
 print('Building model...')
+
+torch.cuda.set_device(args.gpu)
 Z_dim = args.latent_size
 #number of updates to discriminator for every update to generator
 disc_iters = 5
 
-discriminator = model.Discriminator().cuda()
 generator = model.Generator(Z_dim).cuda()
 encoder = model.Encoder(Z_dim).cuda()
+
+map_loc = {
+        'cuda:0': 'cuda:0',
+        'cuda:1': 'cuda:0',
+        'cuda:2': 'cuda:0',
+        'cuda:3': 'cuda:0',
+        'cuda:4': 'cuda:0',
+        'cuda:5': 'cuda:0',
+        'cuda:6': 'cuda:0',
+        'cuda:7': 'cuda:0',
+        'cpu': 'cpu',
+}
+
+if args.enc_file != None:
+    encoder.load_state_dict(torch.load(args.enc_file))#, map_location=map_loc))
+if args.gen_file != None:
+    generator.load_state_dict(torch.load(args.gen_file))#, map_location=map_loc))
 
 #encoder.load_state_dict(torch.load("./checkpoints/enc_49"))
 #generator.load_state_dict(torch.load("./checkpoints/gen_49"))
@@ -57,12 +80,10 @@ encoder = model.Encoder(Z_dim).cuda()
 # because the spectral normalization module creates parameters that don't require gradients (u and v), we don't want to 
 # optimize these using sgd. We only let the optimizer operate on parameters that _do_ require gradients
 # TODO: replace Parameters with buffers, which aren't returned from .parameters() method.
-optim_disc = optim.Adam(filter(lambda p: p.requires_grad, discriminator.parameters()), lr=args.lr, betas=(0.0,0.9))
 optim_gen = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.0,0.9))
 optim_enc = optim.Adam(filter(lambda p: p.requires_grad, encoder.parameters()), lr=args.lr, betas=(0.0,0.9))
 
 # use an exponentially decaying learning rate
-scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 scheduler_e = optim.lr_scheduler.ExponentialLR(optim_enc, gamma=0.99)
 print('finished building model')
@@ -73,16 +94,20 @@ def sample_z(batch_size, z_dim):
     return Variable(z.cuda())
 
 def train(epoch, max_batches=100):
+    #import pdb; pdb.set_trace()
     for batch_idx, (data, target) in enumerate(loader):
         
-        if data.size()[0] != args.batch_size:
+        if len(data.size()) != 5 or data.size()[0] != args.batch_size:
+            #TODO: add debug here to find out why the data is bad
             continue
         data = Variable(data.cuda())
-
+        
+        data = data.squeeze(2)
+        
         # reconstruct images
         optim_enc.zero_grad()
         optim_gen.zero_grad()
-        
+        #import pdb; pdb.set_trace()
         reconstructed = generator(encoder(data))
 
         aac_loss = torch.sum((reconstructed - data)**2 )#> .1)
@@ -94,11 +119,10 @@ def train(epoch, max_batches=100):
         if batch_idx % 10 == 0:
             #print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
             print("Autoencoder loss: {:.3f}".format(aac_loss.data[0]))
-        if batch_idx == max_batches:
+        if batch_idx >= max_batches:
             print('Training completed {} batches, ending epoch'.format(max_batches))
             break
     scheduler_e.step()
-    scheduler_d.step()
     scheduler_g.step()
     
 
@@ -211,19 +235,21 @@ def main():
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     
     for epoch in range(args.epochs):
+        epoch += args.starting_epoch
         print('starting epoch {}'.format(epoch))
         train(epoch)
+        #import pdb; pdb.set_trace()
         test_img = loader.get_img()
         #print (test_img.shape)
-        imsave("./imgs/real_img"+str(epoch)+".png", np.reshape(test_img, (80,80)) * 255)
+        imsave("./imgs/real_img"+str(epoch)+".png", np.reshape(test_img[0], (80,80)) * 255)
         list = []
         list.append(test_img)
-        z = encoder(Variable(torch.Tensor(np.array(list)).cuda()))
-        samples = generator(z).cpu().data.numpy()
+        z = encoder(Variable(torch.Tensor(np.array(list)).cuda()).squeeze(2))
+        samples = generator(z).cpu().data.numpy()[0][0]
         pixels = np.reshape(samples, (80,80)) * 255.0
         imutil.show(pixels, filename="./imgs/fake_img"+str(epoch)+".png")
        
-        torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
+        #torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
         torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
         torch.save(encoder.state_dict(), os.path.join(args.checkpoint_dir, 'enc_{}'.format(epoch)))
 

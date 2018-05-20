@@ -7,7 +7,7 @@ from torch.autograd import Variable
 
 from spectral_normalization import SpectralNorm
 
-channels = 1
+channels = 4
 leak = 0.1
 
 
@@ -88,43 +88,3 @@ class Generator(nn.Module):
         x = torch.cat((x1, x2), dim=1)
         x = nn.Tanh()(self.conv_to_rgb(x))
         return x
-
-# What is w_g supposed to be?
-w_g = 3
-class Discriminator(nn.Module):
-    def __init__(self):
-        super(Discriminator, self).__init__()
-
-        # 80 x 80
-        self.conv1 = SpectralNorm(nn.Conv2d(channels, 64, 3, stride=1, padding=(1,1)))
-        # 80 x 80
-        self.conv2 = SpectralNorm(nn.Conv2d(64, 64, 4, stride=2, padding=(1,1)))
-        # 40 x 40
-        self.conv3 = SpectralNorm(nn.Conv2d(64, 128, 3, stride=1, padding=(1,1)))
-        # 40 x 40
-        self.conv4 = SpectralNorm(nn.Conv2d(128, 128, 4, stride=2, padding=(1,1)))
-        # 20 x 20
-        self.conv5 = SpectralNorm(nn.Conv2d(128, 256, 3, stride=1, padding=(1,1)))
-        # 20 x 20
-        self.conv6 = SpectralNorm(nn.Conv2d(256, 256, 4, stride=2, padding=(1,1)))
-        # 10 x 10
-        self.conv7 = SpectralNorm(nn.Conv2d(256, 256, 4, stride=2, padding=(1,1)))
-        # 5 x 5
-        self.conv8 = SpectralNorm(nn.Conv2d(256, 512, 3, stride=1, padding=(0,0)))
-        # 3 x 3
-
-        self.fc = SpectralNorm(nn.Linear(w_g * w_g * 512, 1))
-
-    def forward(self, x):
-        m = x
-        m = nn.LeakyReLU(leak)(self.conv1(m))
-        m = nn.LeakyReLU(leak)(self.conv2(m))
-        m = nn.LeakyReLU(leak)(self.conv3(m))
-        m = nn.LeakyReLU(leak)(self.conv4(m))
-        m = nn.LeakyReLU(leak)(self.conv5(m))
-        m = nn.LeakyReLU(leak)(self.conv6(m))
-        m = nn.LeakyReLU(leak)(self.conv7(m))
-        m = nn.LeakyReLU(leak)(self.conv8(m))
-
-        return self.fc(m.view(-1,w_g * w_g * 512))
-

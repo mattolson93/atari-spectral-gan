@@ -19,32 +19,41 @@ class AtariDataloader():
             env = gym.make(name)
             env.reset()
             # Start each environment at a random time
-            for _ in range(random.randint(1, 100)):
+            steps = random.randint(1, 100)
+            for _ in range(steps):
                 env.step(env.action_space.sample())
-            self.environments.append(env)
+            self.environments.append((env,steps))
 
     def __iter__(self):
         return self
     
     def __next__(self):
+    
+        #import pdb; pdb.set_trace()
         observations = []
-        for env in self.environments:
-            pixels = self.step_env(env)
+        for (env,steps) in self.environments:
+            vid = self.step_env(env,steps)
             
-            observations.append(pixels)
+            observations.append(vid)
         # Standard API: next() returns two tensors (x, y)
         return torch.Tensor(np.array(observations)), None
         
-    def step_env(self, env):
-        obs, r, done, info = env.step(env.action_space.sample())
-        if r:
-            # After a point is scored, reset
-            env.reset()
-            # Wait until the ball appears
-            for _ in range(20):
-                env.step(env.action_space.sample())
+    def step_env(self, env, episode_length):
+        ret = []
+        for _ in range(4):
+            obs, r, done, info = env.step(env.action_space.sample())
+            ret.append(obs)
+            done = done or episode_length >= 1e4
+            if done:
+                # After a point is scored, reset
+                env.reset()
+                obs, r, done, info = env.step(env.action_space.sample())
                 
-        return prepro(obs)
+                ret = []
+                ret.append(obs*4)
+                break
+                
+        return [prepro(x) for x in ret]
         '''pixels = obs[35:195]
         pixels = imresize(pixels, (80,80)).astype(np.float32)
         pixels = (pixels - 128) / 128
@@ -54,5 +63,6 @@ class AtariDataloader():
         
     
     def get_img(self):
-        return self.step_env(random.choice(self.environments))
+        env, steps = random.choice(self.environments)
+        return self.step_env(env, steps)
         
