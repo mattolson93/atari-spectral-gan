@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
 import imutil
+from scipy.misc import imsave
 
 
 print('Parsing arguments')
@@ -31,9 +32,11 @@ parser.add_argument('--epochs', type=int, default=10)
 parser.add_argument('--latent_size', type=int, default=10)
 parser.add_argument('--model', type=str, default='dcgan')
 parser.add_argument('--env_name', type=str, default='Pong-v0')
+parser.add_argument('--gpu', type=int, default=7)
+
 
 args = parser.parse_args()
-
+CUDA = True
 
 from atari_data import AtariDataloader
 print('Initializing OpenAI environment...')
@@ -46,85 +49,92 @@ Z_dim = args.latent_size
 #number of updates to discriminator for every update to generator
 disc_iters = 5
 
-discriminator = model.Discriminator().cuda()
+if CUDA: torch.cuda.set_device(args.gpu)
 generator = model.Generator(Z_dim).cuda()
 encoder = model.Encoder(Z_dim).cuda()
+
+#if CUDA:
+#    generator.cuda()
+#    encoder.cuda()
+
+#encoder.load_state_dict(torch.load("./checkpoints/enc_49"))
+#generator.load_state_dict(torch.load("./checkpoints/gen_49"))
 
 # because the spectral normalization module creates parameters that don't require gradients (u and v), we don't want to 
 # optimize these using sgd. We only let the optimizer operate on parameters that _do_ require gradients
 # TODO: replace Parameters with buffers, which aren't returned from .parameters() method.
-optim_disc = optim.Adam(filter(lambda p: p.requires_grad, discriminator.parameters()), lr=args.lr, betas=(0.0,0.9))
 optim_gen = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.0,0.9))
 optim_enc = optim.Adam(filter(lambda p: p.requires_grad, encoder.parameters()), lr=args.lr, betas=(0.0,0.9))
 
 # use an exponentially decaying learning rate
-scheduler_d = optim.lr_scheduler.ExponentialLR(optim_disc, gamma=0.99)
 scheduler_g = optim.lr_scheduler.ExponentialLR(optim_gen, gamma=0.99)
 scheduler_e = optim.lr_scheduler.ExponentialLR(optim_enc, gamma=0.99)
 print('finished building model')
 
-def sample_z(batch_size, z_dim):
-    # Normal Distribution
-    z = torch.randn(batch_size, z_dim)
-    return Variable(z.cuda())
+def loss_function(recon_x, x, mu, logvar):
+    
+    # how well do input x and output recon_x agree?
+    #loss = nn.BCELoss()
+    #BCE = loss(recon_x, x)
+    BCE = (.5*torch.sum((recon_x - x)**2 )) / args.batch_size
+    #BCE = F.binary_cross_entropy(recon_x, x)#.view(-1, 3 * 3 * 512))
+
+    # KLD is Kullback–Leibler divergence -- how much does one learned
+    # distribution deviate from another, in this specific case the
+    # learned distribution from the unit Gaussian
+
+    # see Appendix B from VAE paper:
+    # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+    # https://arxiv.org/abs/1312.6114
+    # - D_{KL} = 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    # note the negative D_{KL} in appendix B of the paper
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # Normalise by same number of elements as in reconstruction
+    KLD /= args.batch_size #* 3 * 3 * 512
+
+    # BCE tries to make our reconstruction as accurate as possible
+    # KLD tries to push the distributions as close as possible to unit Gaussian
+    return BCE + KLD
+
+
 
 def train(epoch, max_batches=100):
     for batch_idx, (data, target) in enumerate(loader):
         if data.size()[0] != args.batch_size:
             continue
-        data = Variable(data.cuda())
-
+        data = Variable(data).cuda()
+        
         # reconstruct images
         optim_enc.zero_grad()
         optim_gen.zero_grad()
 
-        reconstructed = generator(encoder(data))
+        mu, logvar = encoder(data)
+        recon_batch = generator(encoder.reparameterize(mu, logvar))
 
-        aac_loss = torch.sum((reconstructed - data)**2)
-        aac_loss.backward()
+        # calculate scalar loss
+        loss = loss_function(recon_batch, data, mu, logvar)
+
+        #aac_loss = torch.sum((reconstructed - data)**2 )#> .1)
+        loss.backward()
 
         optim_enc.step()
         optim_gen.step()
 
-        """
-        # update discriminator
-        for _ in range(disc_iters):
-            z = sample_z(args.batch_size, Z_dim)
-            optim_disc.zero_grad()
-            optim_gen.zero_grad()
-            if args.loss == 'hinge':
-                disc_loss = nn.ReLU()(1.0 - discriminator(data)).mean() + nn.ReLU()(1.0 + discriminator(generator(z))).mean()
-            elif args.loss == 'wasserstein':
-                disc_loss = -discriminator(data).mean() + discriminator(generator(z)).mean()
-            else:
-                disc_loss = nn.BCEWithLogitsLoss()(discriminator(data), Variable(torch.ones(args.batch_size, 1).cuda())) + \
-                    nn.BCEWithLogitsLoss()(discriminator(generator(z)), Variable(torch.zeros(args.batch_size, 1).cuda()))
-            disc_loss.backward()
-            optim_disc.step()
-
-        z = sample_z(args.batch_size, Z_dim)
-
-        # update generator
-        optim_disc.zero_grad()
-        optim_gen.zero_grad()
-        if args.loss == 'hinge' or args.loss == 'wasserstein':
-            gen_loss = -discriminator(generator(z)).mean()
-        else:
-            gen_loss = nn.BCEWithLogitsLoss()(discriminator(generator(z)), Variable(torch.ones(args.batch_size, 1).cuda()))
-        gen_loss.backward()
-        optim_gen.step()
-        """
-
         if batch_idx % 10 == 0:
             #print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
-            print("Autoencoder loss: {:.3f}".format(aac_loss.data[0]))
+            print("VAE loss: {:.3f}".format(loss.data[0]))
         if batch_idx == max_batches:
             print('Training completed {} batches, ending epoch'.format(max_batches))
             break
     scheduler_e.step()
-    scheduler_d.step()
     scheduler_g.step()
+    
 
+'''
+def sample_z(batch_size, z_dim):
+    # Normal Distribution
+    z = torch.randn(batch_size, z_dim)
+    return Variable(z.cuda())
 
 fixed_z = sample_z(args.batch_size, Z_dim)
 def evaluate(epoch):
@@ -227,18 +237,30 @@ def make_video(output_video_name):
         pixels = samples.transpose((0,2,3,1)) * 0.5 + 0.5
         v.write_frame(pixels)
     v.finish()
-
+'''
 
 def main():
     print('creating checkpoint directory')
     os.makedirs(args.checkpoint_dir, exist_ok=True)
+    
     for epoch in range(args.epochs):
         print('starting epoch {}'.format(epoch))
         train(epoch)
-        make_video('epoch_{:03d}'.format(epoch))
-        evaluate(epoch)
-        torch.save(discriminator.state_dict(), os.path.join(args.checkpoint_dir, 'disc_{}'.format(epoch)))
-        torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
+        test_img = loader.get_img()
+        #print (test_img.shape)
+        imsave("./imgs/real_img"+str(epoch)+".png", np.reshape(test_img, (80,80)) * 255)
+        lis = []
+        lis.append(test_img)
+        l = torch.Tensor(np.array(lis)).cuda()
+
+        z, _ = encoder(Variable(l))
+        samples = generator(z).cpu().data.numpy()
+        pixels = np.reshape(samples, (80,80)) * 255.0
+        imutil.show(pixels, filename="./imgs/fake_img"+str(epoch)+".png")
+        
+        if epoch % 5 == 0:
+            torch.save(generator.state_dict(), os.path.join(args.checkpoint_dir, 'gen_{}'.format(epoch)))
+            torch.save(encoder.state_dict(), os.path.join(args.checkpoint_dir, 'enc_{}'.format(epoch)))
 
 
 if __name__ == '__main__':

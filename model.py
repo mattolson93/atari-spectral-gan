@@ -7,15 +7,57 @@ from torch.autograd import Variable
 
 from spectral_normalization import SpectralNorm
 
-channels = 3
+channels = 1
 leak = 0.1
 
+CUDA = True
+
+class Normal(object):
+    def __init__(self, mu, sigma, log_sigma, v=None, r=None):
+        self.mu = mu
+        self.sigma = sigma  # either stdev diagonal itself, or stdev diagonal from decomposition
+        self.logsigma = log_sigma
+        dim = mu.get_shape()
+        if v is None:
+            v = torch.FloatTensor(*dim)
+        if r is None:
+            r = torch.FloatTensor(*dim)
+        self.v = v
+        self.r = r
+'''
+class VAE(torch.nn.Module):
+
+    def __init__(self, encoder, decoder):
+        super(VAE, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self._enc_mu = torch.nn.Linear(100, 8)
+        self._enc_log_sigma = torch.nn.Linear(100, 8)
+
+    def _sample_latent(self, h_enc):
+        """
+        Return the latent normal sample z ~ N(mu, sigma^2)
+        """
+        mu = self._enc_mu(h_enc)
+        log_sigma = self._enc_log_sigma(h_enc)
+        sigma = torch.exp(log_sigma)
+        std_z = torch.from_numpy(np.random.normal(0, 1, size=sigma.size())).float()
+
+        self.z_mean = mu
+        self.z_sigma = sigma
+
+        return mu + sigma * Variable(std_z, requires_grad=False)  # Reparameterization trick
+
+    def forward(self, state):
+        h_enc = self.encoder(state)
+        z = self._sample_latent(h_enc)
+        return self.decoder(z)'''
 
 class Encoder(nn.Module):
     def __init__(self, latent_size):
         super(Encoder, self).__init__()
         self.latent_size = latent_size
-
+        self.training = True
         # 80 x 80
         self.conv1 = SpectralNorm(nn.Conv2d(channels, 64, 3, stride=1, padding=(1,1)))
         # 80 x 80
@@ -34,7 +76,8 @@ class Encoder(nn.Module):
         self.conv8 = SpectralNorm(nn.Conv2d(256, 512, 3, stride=1, padding=(0,0)))
         # 3 x 3
 
-        self.fc = SpectralNorm(nn.Linear(3 * 3 * 512, latent_size))
+        self.fc_mu = SpectralNorm(nn.Linear(3 * 3 * 512, latent_size))
+        self.fc_lvar = SpectralNorm(nn.Linear(3 * 3 * 512, latent_size))
 
     def forward(self, x):
         m = x
@@ -47,7 +90,36 @@ class Encoder(nn.Module):
         m = nn.LeakyReLU(leak)(self.conv7(m))
         m = nn.LeakyReLU(leak)(self.conv8(m))
 
-        return self.fc(m.view(-1, 3 * 3 * 512))
+        mu, logvar = self.fc_mu(m.view(-1, 3 * 3 * 512)), self.fc_lvar(m.view(-1, 3 * 3 * 512))
+        
+        return mu, logvar
+    
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            # multiply log variance with 0.5, then in-place exponent
+            # yielding the standard deviation
+            std = logvar.mul(0.5).exp_()  # type: Variable
+            # - std.data is the [128,ZDIMS] tensor that is wrapped by std
+            # - so eps is [128,ZDIMS] with all elements drawn from a mean 0
+            #   and stddev 1 normal distribution that is 128 samples
+            #   of random ZDIMS-float vectors
+            eps = Variable(std.data.new(std.size()).normal_())
+            # - sample from a normal distribution with standard
+            #   deviation = std and mean = mu by multiplying mean 0
+            #   stddev 1 sample with desired std and mu, see
+            #   https://stats.stackexchange.com/a/16338
+            # - so we have 128 sets (the batch) of random ZDIMS-float
+            #   vectors sampled from normal distribution with learned
+            #   std and mu for the current input
+            return eps.mul(std).add_(mu)
+
+        else:
+            # During inference, we simply spit out the mean of the
+            # learned distribution for the current input.  We could
+            # use a random sample from the distribution, but mu of
+            # course has the highest probability.
+            return mu
+
 
 
 class Generator(nn.Module):
@@ -74,8 +146,9 @@ class Generator(nn.Module):
         # Generate a grid to help learn absolute position
         grid = np.zeros((1, 80, 80))
         grid[:,:,::5] = 1
-        self.placement_grid = Variable(torch.Tensor(grid).cuda())
+        self.placement_grid = Variable(torch.Tensor(grid)).cuda()
         self.conv_to_rgb = nn.ConvTranspose2d(64 + 1, channels, 3, stride=1, padding=(1,1))
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, z):
         batch_size = z.shape[0]
@@ -86,7 +159,7 @@ class Generator(nn.Module):
         x2 = self.placement_grid.expand(batch_size, 1, 80, 80)
         # Combine them along the channels axis
         x = torch.cat((x1, x2), dim=1)
-        x = nn.Tanh()(self.conv_to_rgb(x))
+        x = self.sigmoid(self.conv_to_rgb(x))
         return x
 
 # What is w_g supposed to be?
