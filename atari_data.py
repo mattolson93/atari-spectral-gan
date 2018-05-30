@@ -17,12 +17,9 @@ class AtariDataloader():
         self.environments = []
         for i in range(batch_size):
             env = gym.make(name)
+            env.seed(i)
             env.reset()
-            # Start each environment at a random time
-            steps = random.randint(1, 100)
-            for _ in range(steps):
-                env.step(env.action_space.sample())
-            self.environments.append((env,steps))
+            self.environments.append(env)
 
     def __iter__(self):
         return self
@@ -31,37 +28,26 @@ class AtariDataloader():
     
         #import pdb; pdb.set_trace()
         observations = []
-        for (env,steps) in self.environments:
-            vid = self.step_env(env,steps)
-            
+        for env in self.environments:
+
+            vid = self.step_env(env)
             observations.append(vid)
         # Standard API: next() returns two tensors (x, y)
         return torch.Tensor(np.array(observations)), None
         
-    def step_env(self, env, episode_length):
+    def step_env(self, env):
         ret = []
-        for _ in range(4):
+        episode_length = 0
+        done = False
+        while episode_length <= (1e3 - 1):
             obs, r, done, info = env.step(env.action_space.sample())
-            ret.append(obs)
-            done = done or episode_length >= 1e4
-            if done:
-                # After a point is scored, reset
-                env.reset()
-                obs, r, done, info = env.step(env.action_space.sample())
-                
-                ret = []
-                ret.append(obs*4)
-                break
-                
-        return [prepro(x) for x in ret]
-        '''pixels = obs[35:195]
-        pixels = imresize(pixels, (80,80)).astype(np.float32)
-        pixels = (pixels - 128) / 128
-        # Output batch x channels x height x width
+            ret.append(prepro(obs))
+            episode_length += 1
+            #done = done or episode_length >= 1e3 #TODO: allow for arbitrary game lengths
+        print(episode_length)
+        env.reset()
+        return ret
         
-        return pixels.transpose((2,0,1))'''
-        
-    
     def get_img(self):
         env, steps = random.choice(self.environments)
         return self.step_env(env, steps)

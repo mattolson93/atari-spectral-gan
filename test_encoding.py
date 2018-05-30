@@ -74,6 +74,8 @@ def main():
     print('finished loading models')
 
     env = gym.make(args.env_name)
+    env.seed(558423)
+    env.reset()
     env.reset()
 
     os.makedirs(args.img_dir, exist_ok=True)
@@ -82,22 +84,30 @@ def main():
     frames = []
     frames.append(prepro(env.render(mode='rgb_array')) * 4)
     for i in range(args.game_length+1):
-        imsave(args.img_dir + "/real_" + str(i) + ".png", np.reshape(frames[-1], (80,80)) * 255)
+        #imsave(args.img_dir + "/real_" + str(i) + ".png", np.reshape(frames[-1], (80,80)) * 255)
         obs, r, done, info = env.step(env.action_space.sample())
         frames.append(prepro(obs))
 
+    hx = Variable(torch.zeros(1, args.latent_size)).cuda()
+    cx = Variable(torch.zeros(1, args.latent_size)).cuda()
+
+    frames = Variable(torch.Tensor(np.array(frames)).cuda())
     #TODO: check if this is off by 1 compared to real frames
     print("parsing the game frames through the network")
-    for i in range(4,len(frames)):
-        l = []
-        l.append(frames[i-4:i])
-        z = encoder(Variable(torch.Tensor(np.array(l)).cuda()).squeeze(2))
-        samples = generator(z).cpu().data.numpy()[0]
-        im_to_save = []
+    for i in range(len(frames)):
+        #import pdb; pdb.set_trace()
+        x = frames[i].view([1,1,80,80])
+        hx, cx = encoder(x,(hx,cx))
+        #pass hx (z) to decoder
+        if i < 4: continue
+        reconstructed = generator(hx) 
+
+        samples = np.hstack(reconstructed.cpu().data.numpy()[0])
+        real = np.hstack(torch.cat([frames[i-3],frames[i-2],frames[i-1],frames[i]]).cpu().data.numpy())
+        output = np.vstack([real, samples]) * 255
         #for j in range(4):
             #imsave(args.img_dir + "/fake_" + str(i) + "_" + str(j)+".png", np.reshape(samples[j], (80,80)) * 255)
-        #import pdb; pdb.set_trace()
-        imsave(args.img_dir + "/fake_" + str(i-1)+".png", np.hstack(samples) * 255)
+        imsave(args.img_dir + "/output" + str(i)+".png", output)
 
 
 
