@@ -9,6 +9,7 @@ from scipy.misc import imresize
 from imutil import show
 
 import torch
+import random
 
 prepro = lambda img: imresize(img[35:195].mean(2), (80,80)).astype(np.float32).reshape(1,80,80)/255.
 
@@ -28,23 +29,25 @@ class AtariDataloader():
     
         #import pdb; pdb.set_trace()
         observations = []
+        ending = random.randint(0, 20)
         for env in self.environments:
 
-            vid = self.step_env(env)
+            vid = self.step_env(env, ending)
             observations.append(vid)
         # Standard API: next() returns two tensors (x, y)
         return torch.Tensor(np.array(observations)), None
         
-    def step_env(self, env):
+    def step_env(self, env, ending):
         ret = []
         episode_length = 0
         done = False
-        while episode_length <= (1e3 - 1):
+        total_length = 1e3 - 1 + ending
+        while episode_length <= (total_length):
             obs, r, done, info = env.step(env.action_space.sample())
             ret.append(prepro(obs))
             episode_length += 1
             #done = done or episode_length >= 1e3 #TODO: allow for arbitrary game lengths
-        print(episode_length)
+        #print(episode_length)
         env.reset()
         return ret
         

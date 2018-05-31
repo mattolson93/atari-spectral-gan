@@ -100,13 +100,15 @@ def main():
         hx, cx = encoder(x,(hx,cx))
         #pass hx (z) to decoder
         if i < 4: continue
-        reconstructed = generator(hx) 
+        reconstructed, prev = generator(hx) 
+        reconstructed_prev, _ = generator(prev) 
 
-        samples = np.hstack(reconstructed.cpu().data.numpy()[0])
-        real = np.hstack(torch.cat([frames[i-3],frames[i-2],frames[i-1],frames[i]]).cpu().data.numpy())
-        output = np.vstack([real, samples]) * 255
-        #for j in range(4):
-            #imsave(args.img_dir + "/fake_" + str(i) + "_" + str(j)+".png", np.reshape(samples[j], (80,80)) * 255)
+        #import pdb; pdb.set_trace()
+        fake = np.hstack([reconstructed_prev.cpu().data.numpy()[0][0], reconstructed.cpu().data.numpy()[0][0]])
+        real = np.hstack(torch.cat([frames[i-1],frames[i]]).cpu().data.numpy())
+        output = np.vstack([real, fake]) * 255
+        #output = np.hstack([frames[i][0].cpu().data.numpy(), reconstructed.cpu().data.numpy()[0][0]]) * 255
+        
         imsave(args.img_dir + "/output" + str(i)+".png", output)
 
 

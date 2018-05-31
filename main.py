@@ -22,7 +22,7 @@ from scipy.misc import imsave
 
 print('Parsing arguments')
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=64)
+parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--loss', type=str, default='hinge')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
@@ -88,7 +88,8 @@ scheduler_e = optim.lr_scheduler.ExponentialLR(optim_enc, gamma=0.99)
 print('finished building model')
 
 def save_real_fake(fake, real, img_dir, i, epoch):
-    fake_pixels = np.hstack(fake.cpu().data.numpy()[0]) * 255.0
+    #import pdb; pdb.set_trace()
+    fake_pixels = fake[0][0].cpu().data.numpy()* 255.0
     imsave("{}/fake_img{}_{}.png".format(img_dir, epoch, i), fake_pixels)
     imsave("{}/real_img{}_{}.png".format(img_dir, epoch, i), real[0][0].cpu().data.numpy() * 255)
                 
@@ -111,46 +112,79 @@ def train(epoch, img_dir, max_batches=1):
         #import pdb; pdb.set_trace()
 
         hx = Variable(torch.zeros(args.batch_size, args.latent_size)).cuda()
+        prev_hx = Variable(torch.zeros(args.batch_size, args.latent_size)).cuda()
         cx = Variable(torch.zeros(args.batch_size, args.latent_size)).cuda()
 
         lstm_steps = 20
-        cur_loss = 0
-        aac_loss = []
+
+        hxs = [hx]
+        k=0
         ret = None
         data = torch.transpose(data, 0,1)
         for i in range(len(data)):
+            prev_hx = hx.clone()
             (hx, cx) = encoder(data[i],(hx,cx))
-            #pass hx (z) to decoder
-            if i < 4: continue
+            hxs.append(hx.clone())
+            if i==0:continue
 
-            reconstructed = generator(hx) 
-            #if epoch == 7:
-            #    imsave("test{}.png".format(i), reconstructed.cpu().data.numpy()[0][-1] * 255)
-            real = torch.cat([data[i-3],data[i-2],data[i-1],data[i]],1)
-            cur_loss = torch.sum((reconstructed - real)**2 )
-            aac_loss.append(cur_loss)#> .1)
+            reconstructed, predicted_prev_z = generator(hx)
+            recon_loss = torch.sum((reconstructed - data[i])**2 )
+            pred_loss = torch.sum((prev_hx - predicted_prev_z)**2 )
 
-            # 4995.7231
-            #[torch.cuda.FloatTensor of size 1 (GPU 1)]
+            optim_enc.zero_grad()
+            optim_gen.zero_grad()
+            full_loss = torch.sum((recon_loss)) + torch.sum((pred_loss))
+            full_loss.backward()
 
-            if i % lstm_steps == 0:
-                print("Autoencoder loss: {:.3f}".format(cur_loss.data[0]))
+            hxs = []
+
+            optim_enc.step()
+            optim_gen.step()
+
+            hx = Variable(hx.data).cuda()
+            cx = Variable(cx.data).cuda()
+            if i % 20 == 0:
+                print("Autoencoder loss: {:.3f}, pred_loss: {:.3f}".format(recon_loss.data[0], pred_loss.data[0]))
+                
+
+            if k + lstm_steps <= i and False:
+                k = i
+                lstm_steps = random.randint(11, 20)
+                #import pdb; pdb.set_trace()
+                predicted_prev_z = hxs[-1]
+                recon_losses = []
+                pred_losses = []
+                hxs = list(reversed(hxs))
+                for j in range(len(hxs)-1):
+                    reconstructed, predicted_prev_z = generator(predicted_prev_z)
+
+                    #save_real_fake(reconstructed, data[i-j], img_dir, i-j, epoch)
+
+                    recon_losses.append(torch.sum((reconstructed - data[i-j])**2 ) )
+                    pred_losses.append(torch.sum((predicted_prev_z - hxs[j+1])**2))
+                    break
+
+                if len(recon_losses) == 0:
+                    import pdb; pdb.set_trace()
+                    
+                print("Autoencoder loss: {:.3f}, pred_loss: {:.3f}".format(recon_losses[0].data[0], pred_losses[0].data[0]))
                 #print("hx: {:.3f}".format(torch.sum(hx[0].cpu().data)))
                 #ret = (reconstructed[-1][0] , data[i][0][0])
-                save_real_fake(reconstructed, data[i], img_dir, i, epoch)
+                #save_real_fake(reconstructed, data[i-9], img_dir, i, epoch)
                 optim_enc.zero_grad()
                 optim_gen.zero_grad()
                 #probably do this 
                 #torch.nn.utils.clip_grad_norm(model.parameters(), 40)
-                full_loss = torch.sum(torch.cat(aac_loss))#[0]
+                full_loss = torch.sum(torch.cat(recon_losses)) + torch.sum(torch.cat(pred_losses))
                 #import pdb; pdb.set_trace()
                 full_loss.backward()
 
+                #this needs to go before non-linearity of each gate of LSTM
                 #for param in generator.parameters():
                 #    param.grad.data.clamp_(-0.1, 0.1)
                 #for param in encoder.parameters():
                 #    param.grad.data.clamp_(-0.1, 0.1)
-                aac_loss = []
+                hxs = []
 
                 optim_enc.step()
                 optim_gen.step()

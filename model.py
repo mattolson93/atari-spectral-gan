@@ -58,13 +58,14 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.z_dim = z_dim
         self.hidden_units = 128 * 2 * 3 * 4
-        self.fc = nn.Linear(z_dim, self.hidden_units)
+        self.prev = nn.Linear(z_dim, z_dim)
 
+        self.fc = nn.Linear(z_dim, self.hidden_units)
         self.deconv1 = nn.ConvTranspose2d(self.hidden_units, 512, 4, stride=1)
         self.deconv2 = nn.ConvTranspose2d(512, 256, 4, stride=2, padding=(0,0)) # 10
         self.deconv3 = nn.ConvTranspose2d(256, 128, 4, stride=2, padding=(1,1)) #20
         self.deconv4 = nn.ConvTranspose2d(128, 128, 4, stride=2, padding=(1,1)) #40
-        self.deconv5 = nn.ConvTranspose2d(128, 4, 4, stride=2, padding=(1,1))
+        self.deconv5 = nn.ConvTranspose2d(128, 1, 4, stride=2, padding=(1,1))
 
         self.init_weights()
 
@@ -92,6 +93,7 @@ class Generator(nn.Module):
 
 
     def forward(self, x):
+        prev_z = self.prev(x)
         x = F.relu(self.fc(x))
         x = x.view((-1, self.hidden_units, 1, 1))
         x = F.relu(self.deconv1(x))
@@ -100,4 +102,4 @@ class Generator(nn.Module):
         x = F.relu(self.deconv4(x))
         x = self.deconv5(x)
 
-        return x
+        return x, prev_z
