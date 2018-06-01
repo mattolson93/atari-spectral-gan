@@ -57,7 +57,7 @@ class Encoder(nn.Module):
     def __init__(self, latent_size):
         super(Encoder, self).__init__()
         self.latent_size = latent_size
-        self.training = True
+        self.training = False
         # 80 x 80
         self.conv1 = SpectralNorm(nn.Conv2d(channels, 64, 3, stride=1, padding=(1,1)))
         # 80 x 80

@@ -29,7 +29,7 @@ parser.add_argument('--loss', type=str, default='hinge')
 parser.add_argument('--checkpoint_dir', type=str, default='checkpoints')
 parser.add_argument('--epochs', type=int, default=10)
 
-parser.add_argument('--latent_size', type=int, default=10)
+parser.add_argument('--latent_size', type=int, default=100)
 parser.add_argument('--model', type=str, default='dcgan')
 parser.add_argument('--env_name', type=str, default='Pong-v0')
 parser.add_argument('--gpu', type=int, default=7)
@@ -75,8 +75,10 @@ def loss_function(recon_x, x, mu, logvar):
     
     # how well do input x and output recon_x agree?
     #loss = nn.BCELoss()
+    loss = nn.MSELoss(size_average=False)
     #BCE = loss(recon_x, x)
-    BCE = (.5*torch.sum((recon_x - x)**2 )) / args.batch_size
+    MSE = loss(recon_x, x)
+    #BCE = (.5*torch.sum((recon_x - x)**2 ))
     #BCE = F.binary_cross_entropy(recon_x, x)#.view(-1, 3 * 3 * 512))
 
     # KLD is Kullback–Leibler divergence -- how much does one learned
@@ -90,11 +92,10 @@ def loss_function(recon_x, x, mu, logvar):
     # note the negative D_{KL} in appendix B of the paper
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     # Normalise by same number of elements as in reconstruction
-    KLD /= args.batch_size #* 3 * 3 * 512
 
     # BCE tries to make our reconstruction as accurate as possible
     # KLD tries to push the distributions as close as possible to unit Gaussian
-    return BCE + KLD
+    return MSE, KLD
 
 
 
@@ -112,17 +113,17 @@ def train(epoch, max_batches=100):
         recon_batch = generator(encoder.reparameterize(mu, logvar))
 
         # calculate scalar loss
-        loss = loss_function(recon_batch, data, mu, logvar)
+        recon_loss, kld_loss = loss_function(recon_batch, data, mu, logvar)
 
         #aac_loss = torch.sum((reconstructed - data)**2 )#> .1)
-        loss.backward()
+        (recon_loss + kld_loss).backward()
 
         optim_enc.step()
         optim_gen.step()
 
         if batch_idx % 10 == 0:
             #print('disc loss', disc_loss.data[0], 'gen loss', gen_loss.data[0])
-            print("VAE loss: {:.3f}".format(loss.data[0]))
+            print("recon loss: {:.3f}, kld loss: {:.3f}".format(recon_loss.data[0], kld_loss.data[0]))
         if batch_idx == max_batches:
             print('Training completed {} batches, ending epoch'.format(max_batches))
             break
