@@ -11,6 +11,10 @@ import torch.nn.init as weight_init
 channels = 1
 leak = 0.1
 
+def normalize_vector(x, eps=.0001):
+    # Add epsilon for numerical stability when x == 0
+    norm = torch.norm(x, p=2, dim=1) + eps
+    return x / norm.expand(1, -1).t()
 
 class Encoder(nn.Module):
     def __init__(self, latent_size):
@@ -50,18 +54,17 @@ class Encoder(nn.Module):
         x = F.relu(self.fc(x))
 
         hx, cx = self.lstm(x, (hx, cx))
-        return  (hx, cx)
+        return  (normalize_vector(hx), cx)
 
 
 class Generator(nn.Module):
     def __init__(self, z_dim):
         super(Generator, self).__init__()
         self.z_dim = z_dim
-        self.hidden_units = 128 * 2 * 3 * 4
-        self.prev = nn.Linear(z_dim, z_dim)
 
-        self.fc = nn.Linear(z_dim, self.hidden_units)
-        self.deconv1 = nn.ConvTranspose2d(self.hidden_units, 512, 4, stride=1)
+        self.fc = nn.Linear(z_dim, z_dim)
+        self.prev = nn.Linear(z_dim, z_dim)
+        self.deconv1 = nn.ConvTranspose2d(z_dim, 512, 4, stride=1)
         self.deconv2 = nn.ConvTranspose2d(512, 256, 4, stride=2, padding=(0,0)) # 10
         self.deconv3 = nn.ConvTranspose2d(256, 128, 4, stride=2, padding=(1,1)) #20
         self.deconv4 = nn.ConvTranspose2d(128, 128, 4, stride=2, padding=(1,1)) #40
@@ -93,9 +96,9 @@ class Generator(nn.Module):
 
 
     def forward(self, x):
+        x = nn.LeakyReLU(leak)(self.fc(x)) #should this just be relu? or nothing?
         prev_z = self.prev(x)
-        x = F.relu(self.fc(x))
-        x = x.view((-1, self.hidden_units, 1, 1))
+        x = x.view((-1, self.z_dim, 1, 1))
         x = F.relu(self.deconv1(x))
         x = F.relu(self.deconv2(x))
         x = F.relu(self.deconv3(x))
